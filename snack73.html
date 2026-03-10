@@ -89,6 +89,17 @@
     .empty-num-btn:hover { background: #2a2a1a; border-color: #d4a017; color: #d4a017; border-style: solid; }
     .empty-num-btn .plus { font-size: 13px; color: #555; transition: color 0.18s; }
     .empty-num-btn:hover .plus { color: #d4a017; }
+
+    /* チェックボックス整理モード */
+    .check-box {
+      width: 22px; height: 22px; border-radius: 5px; flex-shrink: 0;
+      border: 2px solid #444; background: #1a1a1a; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .check-box.checked { background: #4a8a4a; border-color: #4a8a4a; }
+    .check-box.checked::after { content: "✓"; color: #fff; font-size: 13px; font-weight: 700; }
+    .bottle-card.checked-card { opacity: 0.35; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     .anim { animation: fadeIn 0.25s ease; }
     .spinner {
@@ -247,6 +258,14 @@ function App() {
   const [filterText, setFilterText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [checkedIds, setCheckedIds] = useState(new Set());
+
+  const toggleCheck = (id) => setCheckedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const clearAllChecks = () => setCheckedIds(new Set());
 
   useEffect(() => {
     const unsub = db.collection("bottles")
@@ -373,21 +392,43 @@ function App() {
           {/* 一覧 */}
           {tab==="list" && (
             <div className="anim">
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,gap:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {checkedIds.size > 0 && (
+                    <>
+                      <span style={{fontSize:12,color:"#888"}}>{checkedIds.size}本 整理済み</span>
+                      <button className="btn btn-ghost" style={{fontSize:12,padding:"5px 12px"}} onClick={clearAllChecks}>
+                        チェックを全解除
+                      </button>
+                    </>
+                  )}
+                </div>
                 <button className="btn btn-primary" onClick={()=>openAdd()}>＋ ボトル追加</button>
               </div>
               {DRINK_TYPES.map(type => {
                 const group = typeGroups[type];
+                const visibleCount = group.filter(b => !checkedIds.has(b.id)).length;
                 return (
                   <div key={type} style={{marginBottom:28}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:8,borderBottom:"1px solid #2a2a2a"}}>
                       <div style={{width:3,height:18,background:"#666",borderRadius:2}}/>
                       <span style={{fontSize:16,fontWeight:700,color:"#ccc",letterSpacing:"2px"}}>{type}</span>
-                      <span style={{fontSize:12,color:"#555"}}>{group.length}本</span>
+                      <span style={{fontSize:12,color:"#555"}}>{visibleCount}本</span>
+                      {checkedIds.size > 0 && group.some(b => checkedIds.has(b.id)) && (
+                        <span style={{fontSize:11,color:"#4a8a4a"}}>（{group.filter(b=>checkedIds.has(b.id)).length}本 整理済み）</span>
+                      )}
                     </div>
                     {group.length===0
                       ? <div style={{color:"#444",fontSize:13,paddingLeft:14}}>登録なし</div>
-                      : group.map(b=><BottleCard key={b.id} bottle={b} onEdit={()=>openEdit(b)} onDelete={()=>setConfirmDelete(b.id)}/>)
+                      : group.map(b => (
+                          <BottleCard
+                            key={b.id} bottle={b}
+                            onEdit={()=>openEdit(b)}
+                            onDelete={()=>setConfirmDelete(b.id)}
+                            checked={checkedIds.has(b.id)}
+                            onCheck={()=>toggleCheck(b.id)}
+                          />
+                        ))
                     }
                   </div>
                 );
@@ -539,9 +580,19 @@ function App() {
   );
 }
 
-function BottleCard({ bottle, onEdit, onDelete, showType }) {
+function BottleCard({ bottle, onEdit, onDelete, showType, checked, onCheck }) {
+  if (checked && onCheck) return (
+    <div className="bottle-card checked-card" style={{cursor:"default"}}>
+      <div className={`check-box checked`} onClick={onCheck} title="チェックを外す" style={{cursor:"pointer"}}/>
+      <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontWeight:700,fontSize:15,color:"#666",textDecoration:"line-through"}}>{bottle.name}</span>
+        <span style={{fontSize:12,color:"#555"}}>{bottle.number ? `No.${bottle.number}` : ""}</span>
+      </div>
+    </div>
+  );
   return (
     <div className="bottle-card">
+      {onCheck && <div className={`check-box`} onClick={onCheck} title="整理済みにする"/>}
       <div className="number-badge">{bottle.number||"–"}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
