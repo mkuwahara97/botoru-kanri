@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>スナック73 ボトル管理</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+  <!-- React & Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase v10 compat -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0d0d; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1a1a; }
+    ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    .tab-btn {
+      padding: 10px 14px; border: none; cursor: pointer;
+      font-family: 'Noto Serif JP', serif; font-size: 13px; letter-spacing: 1px;
+      border-bottom: 2px solid transparent; transition: all 0.2s;
+      background: transparent; color: #888;
+    }
+    .tab-btn.active { color: #d4a017; border-bottom-color: #d4a017; }
+    .tab-btn:hover:not(.active) { color: #bbb; }
+    .badge-pill {
+      display: inline-block; padding: 2px 7px; border-radius: 10px;
+      font-size: 10px; margin-left: 3px; vertical-align: middle;
+    }
+    input, textarea, select {
+      background: #1e1e1e; border: 1px solid #3a3020; color: #e8e0d0;
+      border-radius: 6px; padding: 8px 12px; width: 100%;
+      font-family: 'Noto Serif JP', serif; font-size: 14px;
+      outline: none; transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: #d4a017; }
+    textarea { resize: vertical; min-height: 60px; }
+    select option { background: #1e1e1e; }
+    .btn {
+      padding: 9px 20px; border-radius: 6px; border: none;
+      cursor: pointer; font-family: 'Noto Serif JP', serif; font-size: 13px;
+      letter-spacing: 1px; transition: all 0.2s;
+    }
+    .btn-primary { background: #d4a017; color: #0d0d0d; font-weight: 700; }
+    .btn-primary:hover { background: #f0c842; }
+    .btn-primary:disabled { background: #5a4a10; color: #333; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: #888; border: 1px solid #333; }
+    .btn-ghost:hover { border-color: #888; color: #ccc; }
+    .btn-danger { background: transparent; color: #c04040; border: 1px solid #5a2020; font-size: 12px; padding: 5px 10px; }
+    .btn-danger:hover { background: #3a1010; }
+    .btn-edit { background: transparent; color: #888; border: 1px solid #333; font-size: 12px; padding: 5px 10px; }
+    .btn-edit:hover { background: #252525; color: #ccc; }
+    .bottle-card {
+      background: #161616; border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px 16px;
+      display: flex; align-items: flex-start; gap: 12px;
+      transition: border-color 0.2s; margin-bottom: 8px;
+    }
+    .bottle-card:hover { border-color: #555; }
+    .number-badge {
+      min-width: 40px; height: 40px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; flex-shrink: 0;
+      background: #222; color: #aaa; border: 1px solid #333;
+    }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+      padding: 20px;
+    }
+    .modal {
+      background: #161616; border: 1px solid #3a3020;
+      border-radius: 12px; padding: 28px; width: 100%; max-width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8); max-height: 90vh; overflow-y: auto;
+    }
+    .lbl { font-size: 12px; color: #888; letter-spacing: 1px; margin-bottom: 6px; display: block; }
+    .empty-num-btn {
+      background: #1e1e1e; border: 1px dashed #555; color: #ccc;
+      border-radius: 6px; padding: 6px 14px; font-size: 14px; font-weight: 700;
+      cursor: pointer; transition: all 0.18s; font-family: 'Noto Serif JP', serif;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .empty-num-btn:hover { background: #2a2a1a; border-color: #d4a017; color: #d4a017; border-style: solid; }
+    .empty-num-btn .plus { font-size: 13px; color: #555; transition: color 0.18s; }
+    .empty-num-btn:hover .plus { color: #d4a017; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .anim { animation: fadeIn 0.25s ease; }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #333;
+      border-top-color: #d4a017; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 60px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Setup画面 */
+    .setup-wrap {
+      max-width: 560px; margin: 0 auto; padding: 32px 20px 60px;
+      font-family: 'Noto Serif JP', serif; color: #e8e0d0;
+    }
+    .setup-wrap h1 { color: #d4a017; font-size: 22px; margin-bottom: 6px; }
+    .setup-wrap .step {
+      background: #161616; border: 1px solid #2a2a2a; border-radius: 10px;
+      padding: 16px 20px; margin: 14px 0;
+    }
+    .setup-wrap .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #d4a017; color: #000; border-radius: 50%;
+      width: 22px; height: 22px; font-size: 12px; font-weight: 700; margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .setup-wrap .step h3 { display: inline; font-size: 14px; }
+    .setup-wrap .step p { color: #999; font-size: 13px; margin-top: 8px; line-height: 1.8; }
+    .setup-wrap .step a { color: #7eb8e8; }
+    .setup-wrap .note { color: #555; font-size: 12px; margin-top: 20px; line-height: 1.9; }
+    code { background: #222; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// =====================================================
+// 🔥 Firebase設定 — ここに自分のFirebase設定を貼り付ける
+// =====================================================
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCxKWJ_x9d0wSX4tjDM5LIzA2oh_Z241I0",
+  authDomain:        "botoru-kanri-31961.firebaseapp.com",
+  projectId:         "botoru-kanri-31961",
+  storageBucket:     "botoru-kanri-31961.firebasestorage.app",
+  messagingSenderId: "892435761760",
+  appId:             "1:892435761760:web:37faac7d3a955d89741105"
+};
+// =====================================================
+
+const { useState, useEffect, useMemo } = React;
+const DRINK_TYPES = ["霧島他", "白", "壱岐ゴールド", "角"];
+
+const isConfigured = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+let db = null;
+if (isConfigured) {
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+}
+
+// ===== セットアップ画面 =====
+function SetupScreen() {
+  const [v, setV] = useState({ apiKey:"", authDomain:"", projectId:"", storageBucket:"", messagingSenderId:"", appId:"" });
+  const upd = (k, val) => setV(p => ({...p, [k]: val}));
+  const ready = v.apiKey && v.projectId && v.appId;
+
+  const showConfig = () => {
+    const txt =
+`  apiKey: "${v.apiKey}",
+  authDomain: "${v.authDomain}",
+  projectId: "${v.projectId}",
+  storageBucket: "${v.storageBucket}",
+  messagingSenderId: "${v.messagingSenderId}",
+  appId: "${v.appId}"`;
+    navigator.clipboard.writeText(txt).then(
+      () => alert("クリップボードにコピーしました！\nHTMLファイルの FIREBASE_CONFIG に貼り付けてください。"),
+      () => alert("コピー内容:\n\n" + txt)
+    );
+  };
+
+  return (
+    <div className="setup-wrap">
+      <h1>🔥 Firebase 初期設定</h1>
+      <p style={{color:"#888", fontSize:13, marginBottom:4}}>複数デバイスで共有するためにFirebase Firestoreの設定が必要です。</p>
+
+      <div className="step">
+        <span className="step-num">1</span><h3>Firebaseプロジェクトを作る</h3>
+        <p>
+          <a href="https://console.firebase.google.com/" target="_blank">console.firebase.google.com</a> を開く<br/>
+          → 「プロジェクトを追加」→ 名前（例：snack73）を入力 → 作成
+        </p>
+      </div>
+
+      <div className="step">
+        <span className="step-num">2</span><h3>Firestoreデータベースを作る</h3>
+        <p>
+          左メニュー「Firestore Database」→「データベースの作成」<br/>
+          → <strong style={{color:"#e8e0d0"}}>「テストモードで開始」</strong>を選択 → 完了
+        </p>
+      </div>
+
+      <div className="step">
+        <span className="step-num">3</span><h3>ウェブアプリを登録してキーを取得</h3>
+        <p>
+          プロジェクトのトップ →「&lt;/&gt;」ボタン（ウェブアプリ）をクリック<br/>
+          → アプリ名を入力（何でもOK）→「登録」<br/>
+          → 表示された <code>firebaseConfig</code> の各値を下に入力
+        </p>
+      </div>
+
+      <div className="step" style={{borderColor:"#3a3020"}}>
+        <span className="step-num">4</span><h3>設定値を入力</h3>
+        {[["apiKey","apiKey"],["authDomain","authDomain"],["projectId","projectId"],
+          ["storageBucket","storageBucket"],["messagingSenderId","messagingSenderId"],["appId","appId"]
+        ].map(([k, label]) => (
+          <div key={k} style={{marginTop:10}}>
+            <label className="lbl">{label}</label>
+            <input type="text" value={v[k]} onChange={e => upd(k, e.target.value)} placeholder={`${label} を貼り付け`} />
+          </div>
+        ))}
+        <div style={{marginTop:16}}>
+          <button className="btn btn-primary" disabled={!ready} onClick={showConfig}>
+            設定をコピーする
+          </button>
+        </div>
+      </div>
+
+      <div className="step">
+        <span className="step-num">5</span><h3>HTMLを更新してGitHubにアップ</h3>
+        <p>
+          コピーした設定値をこのHTMLファイルの<br/>
+          <code>const FIREBASE_CONFIG = &#123; ... &#125;</code> 部分に貼り付けて保存<br/><br/>
+          GitHubにpush → リポジトリの Settings → Pages → Branch: main → Save<br/>
+          → 表示されたURLがアプリのURLになります！
+        </p>
+      </div>
+
+      <p className="note">
+        ※ テストモードは30日後にアクセス制限がかかります。長期運用時はFirestoreのルールを設定してください。<br/>
+        ※ 複数人が同時に操作するとリアルタイムで画面が更新されます。
+      </p>
+    </div>
+  );
+}
+
+// ===== メインアプリ =====
+function App() {
+  if (!isConfigured) return <SetupScreen />;
+
+  const [bottles, setBottles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("list");
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [form, setForm] = useState({ type:"霧島他", number:"", name:"", memo:"" });
+  const [filterType, setFilterType] = useState("");
+  const [filterText, setFilterText] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const unsub = db.collection("bottles")
+      .orderBy("createdAt", "asc")
+      .onSnapshot(snap => {
+        setBottles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      }, err => { console.error(err); setLoading(false); });
+    return () => unsub();
+  }, []);
+
+  const openAdd = (preType, preNumber) => {
+    setForm({ type: preType || "霧島他", number: preNumber ? String(preNumber) : "", name:"", memo:"" });
+    setEditTarget(null);
+    setShowForm(true);
+  };
+  const openEdit = (b) => {
+    setForm({ type:b.type, number:b.number, name:b.name, memo:b.memo });
+    setEditTarget(b.id);
+    setShowForm(true);
+  };
+  const saveForm = async () => {
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    try {
+      if (editTarget) {
+        await db.collection("bottles").doc(editTarget).update({ type:form.type, number:form.number, name:form.name, memo:form.memo });
+      } else {
+        await db.collection("bottles").add({ type:form.type, number:form.number, name:form.name, memo:form.memo, createdAt:firebase.firestore.FieldValue.serverTimestamp() });
+      }
+      setShowForm(false);
+    } catch(e) { alert("保存エラー: " + e.message); }
+    setSaving(false);
+  };
+  const confirmDeleteExec = async () => {
+    try { await db.collection("bottles").doc(confirmDelete).delete(); }
+    catch(e) { alert("削除エラー: " + e.message); }
+    setConfirmDelete(null);
+  };
+
+  const filtered = useMemo(() => bottles.filter(b => {
+    const typeMatch = !filterType || b.type === filterType;
+    const text = filterText.trim();
+    if (!text) return typeMatch;
+    return typeMatch && ((b.name||"").includes(text) || (b.memo||"").includes(text) || b.type.includes(text));
+  }), [bottles, filterType, filterText]);
+
+  const emptyNumbers = useMemo(() => {
+    const result = {};
+    DRINK_TYPES.forEach(type => {
+      const nums = bottles.filter(b => b.type===type && b.number && b.number.trim()!=="")
+        .map(b => parseInt(b.number)).filter(n => !isNaN(n) && n>0);
+      if (nums.length===0) { result[type]=[1]; return; }
+      const max = Math.max(...nums), used = new Set(nums), empty = [];
+      for (let i=1; i<=max+1; i++) if (!used.has(i)) empty.push(i);
+      result[type] = empty;
+    });
+    return result;
+  }, [bottles]);
+
+  const duplicateNumbers = useMemo(() => {
+    const result = {};
+    DRINK_TYPES.forEach(type => {
+      const nums = bottles.filter(b => b.type===type && b.number && b.number.trim()!=="")
+        .map(b => ({ num:parseInt(b.number), name:b.name })).filter(x => !isNaN(x.num) && x.num>0);
+      const countMap = {};
+      nums.forEach(({ num, name }) => { if (!countMap[num]) countMap[num]=[]; countMap[num].push(name); });
+      result[type] = Object.entries(countMap).filter(([,names])=>names.length>1)
+        .map(([num,names])=>({ num:parseInt(num), names })).sort((a,b)=>a.num-b.num);
+    });
+    return result;
+  }, [bottles]);
+
+  const typeGroups = useMemo(() => {
+    const g = {};
+    DRINK_TYPES.forEach(t => {
+      g[t] = bottles.filter(b=>b.type===t).sort((a,b) => {
+        const na=parseInt(a.number), nb=parseInt(b.number);
+        if (isNaN(na)&&isNaN(nb)) return (a.name||"").localeCompare(b.name||"");
+        if (isNaN(na)) return 1; if (isNaN(nb)) return -1; return na-nb;
+      });
+    });
+    return g;
+  }, [bottles]);
+
+  const hasDuplicates = Object.values(duplicateNumbers).some(arr=>arr.length>0);
+  const hasEmpty = Object.values(emptyNumbers).some(arr=>arr.length>0);
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0d0d0d",color:"#e8e0d0",fontFamily:"'Noto Serif JP','Hiragino Mincho ProN',serif"}}>
+
+      {/* ヘッダー */}
+      <div style={{background:"#0a0a0a",borderBottom:"1px solid #2a2a20",padding:"0 20px",position:"sticky",top:0,zIndex:50}}>
+        <div style={{maxWidth:700,margin:"0 auto"}}>
+          <div style={{padding:"16px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:11,color:"#888",letterSpacing:"3px"}}>Snack</div>
+              <div style={{fontSize:22,fontWeight:700,color:"#d4a017",letterSpacing:"4px",lineHeight:1.1}}>73</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:18,fontWeight:500,letterSpacing:"2px"}}>ボトル管理</div>
+              <div style={{fontSize:11,color:"#666",marginTop:2}}>総数 {bottles.length}本</div>
+            </div>
+          </div>
+          <div style={{display:"flex",marginTop:12}}>
+            {[
+              {key:"list",label:"一覧"},
+              {key:"filter",label:"絞り込み"},
+              {key:"empty",label:"空き番号",badge:hasEmpty?Object.values(emptyNumbers).flat().length:null,bc:"#4a8a4a"},
+              {key:"duplicate",label:"重複",badge:hasDuplicates?Object.values(duplicateNumbers).flat().length:null,bc:"#c04040"},
+            ].map(t=>(
+              <button key={t.key} className={`tab-btn ${tab===t.key?"active":""}`} onClick={()=>setTab(t.key)}>
+                {t.label}
+                {t.badge?<span className="badge-pill" style={{background:t.bc,color:"#fff"}}>{t.badge}</span>:null}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{maxWidth:700,margin:"0 auto",padding:"20px 16px 80px"}}>
+        {loading ? <div className="spinner"/> : <>
+
+          {/* 一覧 */}
+          {tab==="list" && (
+            <div className="anim">
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:20}}>
+                <button className="btn btn-primary" onClick={()=>openAdd()}>＋ ボトル追加</button>
+              </div>
+              {DRINK_TYPES.map(type => {
+                const group = typeGroups[type];
+                return (
+                  <div key={type} style={{marginBottom:28}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:8,borderBottom:"1px solid #2a2a2a"}}>
+                      <div style={{width:3,height:18,background:"#666",borderRadius:2}}/>
+                      <span style={{fontSize:16,fontWeight:700,color:"#ccc",letterSpacing:"2px"}}>{type}</span>
+                      <span style={{fontSize:12,color:"#555"}}>{group.length}本</span>
+                    </div>
+                    {group.length===0
+                      ? <div style={{color:"#444",fontSize:13,paddingLeft:14}}>登録なし</div>
+                      : group.map(b=><BottleCard key={b.id} bottle={b} onEdit={()=>openEdit(b)} onDelete={()=>setConfirmDelete(b.id)}/>)
+                    }
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 絞り込み */}
+          {tab==="filter" && (
+            <div className="anim">
+              <div style={{background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:20,marginBottom:20}}>
+                <div style={{marginBottom:14}}>
+                  <label className="lbl">お酒の種類</label>
+                  <select value={filterType} onChange={e=>setFilterType(e.target.value)}>
+                    <option value="">すべて</option>
+                    {DRINK_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="lbl">キーワード（ボトルネック名・メモ・種類）</label>
+                  <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="部分一致で検索..."/>
+                </div>
+              </div>
+              <div style={{color:"#666",fontSize:12,marginBottom:12}}>{filtered.length}件 見つかりました</div>
+              {filtered.length===0
+                ? <div style={{textAlign:"center",color:"#444",padding:"40px 0"}}>該当なし</div>
+                : filtered.map(b=><BottleCard key={b.id} bottle={b} onEdit={()=>openEdit(b)} onDelete={()=>setConfirmDelete(b.id)} showType/>)
+              }
+            </div>
+          )}
+
+          {/* 空き番号 */}
+          {tab==="empty" && (
+            <div className="anim">
+              <div style={{color:"#888",fontSize:13,marginBottom:4}}>各種類の管理番号の空き（1〜最大番号＋1まで）</div>
+              <div style={{color:"#555",fontSize:12,marginBottom:20}}>番号をクリックするとその番号で新規追加できます</div>
+              {DRINK_TYPES.map(type => {
+                const empty = emptyNumbers[type];
+                return (
+                  <div key={type} style={{marginBottom:20,background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:18}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:3,height:18,background:"#666",borderRadius:2}}/>
+                        <span style={{fontWeight:700,color:"#ccc",letterSpacing:"2px"}}>{type}</span>
+                      </div>
+                      <span style={{fontSize:12,color:"#555"}}>空き {empty.length}件</span>
+                    </div>
+                    {empty.length===0
+                      ? <span style={{color:"#4a8a4a",fontSize:13}}>✓ 空き番号なし</span>
+                      : <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                          {empty.map(n=>(
+                            <button key={n} className="empty-num-btn" onClick={()=>openAdd(type,n)}>
+                              <span>{n}</span><span className="plus">＋</span>
+                            </button>
+                          ))}
+                        </div>
+                    }
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 重複 */}
+          {tab==="duplicate" && (
+            <div className="anim">
+              <div style={{color:"#888",fontSize:13,marginBottom:20}}>同じ管理番号が複数登録されているもの</div>
+              {DRINK_TYPES.map(type => {
+                const dups = duplicateNumbers[type];
+                return (
+                  <div key={type} style={{marginBottom:20,background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:18}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                      <div style={{width:3,height:18,background:"#666",borderRadius:2}}/>
+                      <span style={{fontWeight:700,color:"#ccc",letterSpacing:"2px"}}>{type}</span>
+                    </div>
+                    {dups.length===0
+                      ? <span style={{color:"#4a8a4a",fontSize:13}}>✓ 重複なし</span>
+                      : dups.map(({num,names})=>(
+                          <div key={num} style={{marginBottom:10,background:"#1e1010",border:"1px solid #5a2020",borderRadius:8,padding:"10px 14px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:10}}>
+                              <span style={{background:"#c04040",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:14,fontWeight:700}}>No.{num}</span>
+                              <span style={{color:"#c08080",fontSize:13}}>{names.length}件重複</span>
+                            </div>
+                            <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}}>
+                              {names.map((name,i)=>(
+                                <span key={i} style={{background:"#2a1010",border:"1px solid #4a2020",borderRadius:4,padding:"2px 10px",fontSize:13,color:"#e0b0b0"}}>{name}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                    }
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>}
+      </div>
+
+      {/* 追加・編集モーダル */}
+      {showForm && (
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
+          <div className="modal anim">
+            <div style={{fontSize:16,fontWeight:700,marginBottom:20,color:"#d4a017"}}>
+              {editTarget?"ボトル編集":"ボトル追加"}
+            </div>
+            <div style={{marginBottom:14}}>
+              <label className="lbl">お酒の種類 *</label>
+              <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
+                {DRINK_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label className="lbl">管理番号（任意）</label>
+              <input type="number" min="1" value={form.number} onChange={e=>setForm({...form,number:e.target.value})} placeholder="例：1"/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label className="lbl">ボトルネック名 *</label>
+              <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="例：田中様"/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <label className="lbl">メモ</label>
+              <textarea value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="例：毎週金曜来店"/>
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowForm(false)}>キャンセル</button>
+              <button className="btn btn-primary" onClick={saveForm} disabled={!form.name.trim()||saving}>
+                {saving?"保存中…":"保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 削除確認モーダル */}
+      {confirmDelete && (
+        <div className="modal-overlay" onClick={()=>setConfirmDelete(null)}>
+          <div className="modal anim" style={{maxWidth:320,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:10}}>削除しますか？</div>
+            <div style={{fontSize:13,color:"#888",marginBottom:24}}>この操作は取り消せません</div>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button className="btn btn-ghost" onClick={()=>setConfirmDelete(null)}>キャンセル</button>
+              <button className="btn" style={{background:"#c04040",color:"#fff",fontWeight:700}} onClick={confirmDeleteExec}>削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BottleCard({ bottle, onEdit, onDelete, showType }) {
+  return (
+    <div className="bottle-card">
+      <div className="number-badge">{bottle.number||"–"}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontWeight:700,fontSize:15,color:"#e8e0d0"}}>{bottle.name}</span>
+          {showType&&(
+            <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:"#222",color:"#aaa",border:"1px solid #333"}}>
+              {bottle.type}
+            </span>
+          )}
+        </div>
+        {bottle.memo&&<div style={{color:"#888",fontSize:12,marginTop:4}}>{bottle.memo}</div>}
+      </div>
+      <div style={{display:"flex",gap:6,flexShrink:0}}>
+        <button className="btn btn-edit" onClick={onEdit}>編集</button>
+        <button className="btn btn-danger" onClick={onDelete}>削除</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
