@@ -310,7 +310,12 @@ function App() {
     const typeMatch = !filterType || b.type === filterType;
     const text = filterText.trim();
     if (!text) return typeMatch;
-    return typeMatch && ((b.name||"").includes(text) || (b.memo||"").includes(text) || b.type.includes(text));
+    return typeMatch && (
+      (b.name||"").includes(text) ||
+      (b.memo||"").includes(text) ||
+      b.type.includes(text) ||
+      (b.number||"").includes(text)
+    );
   }), [bottles, filterType, filterText]);
 
   const emptyNumbers = useMemo(() => {
@@ -407,28 +412,30 @@ function App() {
               </div>
               {DRINK_TYPES.map(type => {
                 const group = typeGroups[type];
-                const visibleCount = group.filter(b => !checkedIds.has(b.id)).length;
+                const visible = group.filter(b => !checkedIds.has(b.id));
+                const hiddenCount = group.length - visible.length;
                 return (
                   <div key={type} style={{marginBottom:28}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,paddingBottom:8,borderBottom:"1px solid #2a2a2a"}}>
                       <div style={{width:3,height:18,background:"#666",borderRadius:2}}/>
                       <span style={{fontSize:16,fontWeight:700,color:"#ccc",letterSpacing:"2px"}}>{type}</span>
-                      <span style={{fontSize:12,color:"#555"}}>{visibleCount}本</span>
-                      {checkedIds.size > 0 && group.some(b => checkedIds.has(b.id)) && (
-                        <span style={{fontSize:11,color:"#4a8a4a"}}>（{group.filter(b=>checkedIds.has(b.id)).length}本 整理済み）</span>
+                      <span style={{fontSize:12,color:"#555"}}>{visible.length}本</span>
+                      {hiddenCount > 0 && (
+                        <span style={{fontSize:11,color:"#4a8a4a"}}>（{hiddenCount}本 整理済み・非表示）</span>
                       )}
                     </div>
-                    {group.length===0
+                    {visible.length===0 && group.length===0
                       ? <div style={{color:"#444",fontSize:13,paddingLeft:14}}>登録なし</div>
-                      : group.map(b => (
-                          <BottleCard
-                            key={b.id} bottle={b}
-                            onEdit={()=>openEdit(b)}
-                            onDelete={()=>setConfirmDelete(b.id)}
-                            checked={checkedIds.has(b.id)}
-                            onCheck={()=>toggleCheck(b.id)}
-                          />
-                        ))
+                      : visible.length===0
+                        ? <div style={{color:"#4a8a4a",fontSize:13,paddingLeft:14}}>✓ すべて整理済み</div>
+                        : visible.map(b => (
+                            <BottleCard
+                              key={b.id} bottle={b}
+                              onEdit={()=>openEdit(b)}
+                              onDelete={()=>setConfirmDelete(b.id)}
+                              onCheck={()=>toggleCheck(b.id)}
+                            />
+                          ))
                     }
                   </div>
                 );
@@ -448,7 +455,7 @@ function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="lbl">キーワード（ボトルネック名・メモ・種類）</label>
+                  <label className="lbl">キーワード（ボトルネック名・メモ・種類・管理番号）</label>
                   <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="部分一致で検索..."/>
                 </div>
               </div>
@@ -580,19 +587,10 @@ function App() {
   );
 }
 
-function BottleCard({ bottle, onEdit, onDelete, showType, checked, onCheck }) {
-  if (checked && onCheck) return (
-    <div className="bottle-card checked-card" style={{cursor:"default"}}>
-      <div className={`check-box checked`} onClick={onCheck} title="チェックを外す" style={{cursor:"pointer"}}/>
-      <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontWeight:700,fontSize:15,color:"#666",textDecoration:"line-through"}}>{bottle.name}</span>
-        <span style={{fontSize:12,color:"#555"}}>{bottle.number ? `No.${bottle.number}` : ""}</span>
-      </div>
-    </div>
-  );
+function BottleCard({ bottle, onEdit, onDelete, showType, onCheck }) {
   return (
     <div className="bottle-card">
-      {onCheck && <div className={`check-box`} onClick={onCheck} title="整理済みにする"/>}
+      {onCheck && <div className="check-box" onClick={onCheck} title="整理済みにする（非表示）"/>}
       <div className="number-badge">{bottle.number||"–"}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
